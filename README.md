@@ -25,23 +25,23 @@ This is an evolution of the existing script, not a full reinvention.
 ### Included
 - Auto-Detect mode
 - Custom mode
-- Linked and unlinked margin controls
-- Column count and gutter
-- Row count and gutter
-- Baseline step
-- Toggle controls for margins, columns, rows, and baseline
-- Save, load, and delete presets
-- Safer regeneration of plugin-owned guides
-- Optional debounced live preview
-- Active artboard or all artboards scope
+- linked and unlinked margin controls
+- column count and gutter
+- row count and gutter
+- baseline step
+- toggle controls for margins, columns, rows, and baseline
+- save, load, and delete presets
+- safer regeneration of plugin-owned guides
+- optional debounced live preview
+- Active Artboard or All Artboards scope
 
 ### Deferred
 - Formloop zone system as a feature
-- Safe-area overlays
-- Template overlays
-- Content-aware layout logic
-- Brand composition guidance inside the tool
-- Advanced layout systems beyond core grid generation
+- safe-area overlays
+- template overlays
+- content-aware layout logic
+- brand composition guidance inside the tool
+- advanced layout systems beyond core grid generation
 
 ## Design Principle
 
