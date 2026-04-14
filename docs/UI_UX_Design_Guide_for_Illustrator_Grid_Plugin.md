@@ -43,30 +43,30 @@ The plugin should feel like a thoughtful design utility. It should not feel like
 ### Included in v1
 - Auto-Detect mode
 - Custom mode
-- Linked and unlinked margins
-- Column count and gutter
-- Row count and gutter
-- Baseline step
-- Toggle controls for margins, columns, rows, and baseline
-- Save preset
-- Load preset
-- Delete preset
-- Apply grid
-- Safe regeneration of plugin-owned guides
-- Optional debounced live preview
-- Scope selector for Active Artboard or All Artboards
+- linked and unlinked margins
+- column count and gutter
+- row count and gutter
+- baseline step
+- toggle controls for margins, columns, rows, and baseline
+- save preset
+- load preset
+- delete preset
+- Apply Grid
+- safe regeneration of plugin-owned guides
+- optional debounced live preview
+- scope selector for Active Artboard or All Artboards
 
 ### Deferred for later
-- Zone overlays
-- Safe-area overlays
-- Template overlays
-- Composition guidance
-- Content-aware layout logic
-- Brand-specific layout zones inside the tool
+- zone overlays
+- safe-area overlays
+- template overlays
+- composition guidance
+- content-aware layout logic
+- brand-specific layout zones inside the tool
 
 ## 5. Visual Design Direction
 
-The plugin should use Formloop's visual language.
+The plugin should use Formloop’s visual language.
 
 It should feel clean, spacious, and intentional. Accent color should be used sparingly. The interface should rely on alignment, spacing, and typography more than visual effects.
 
@@ -158,7 +158,7 @@ Use an 8px base system.
 | Input fields | 12px |
 | Buttons | 14px |
 | Small icon buttons | 12px |
-|
+
 The UI should feel soft but controlled. Avoid oversized rounding.
 
 ### 8.3 Shadows
@@ -206,7 +206,7 @@ Controls:
 - Right
 - Bottom
 - Left
-- Link / unlink control
+- link / unlink control
 
 Behavior:
 - When linked, editing one value updates all margin values.
@@ -233,7 +233,7 @@ Rows are part of the product now. They should not be labeled as a new feature in
 
 Controls:
 - Step
-- Optional baseline toggle if needed
+- optional baseline toggle if needed
 
 If “Snap to Baseline” is not fully implemented, do not show it in v1.
 
@@ -278,25 +278,25 @@ Use for **Apply Grid**.
 
 Use for preset utilities and lower-priority actions.
 
-- Light surface fill
+- light surface fill
 - Obsidian text
-- Clear border
-- Less visual weight than primary CTA
+- clear border
+- less visual weight than primary CTA
 
 ### 10.3 Inputs
 
-- Light background
-- Soft border
-- Clear focus state using Electric Blue or a subtle cobalt ring
-- Numeric formatting should be easy to read
-- Units should be visually secondary to the value
+- light background
+- soft border
+- clear focus state using Electric Blue or a subtle cobalt ring
+- numeric formatting should be easy to read
+- units should be visually secondary to the value
 
 ### 10.4 Sliders
 
-- Thin active track in Cobalt
-- Soft inactive track
-- Round thumb with restrained size
-- Should feel precise, not oversized
+- thin active track in Cobalt
+- soft inactive track
+- round thumb with restrained size
+- should feel precise, not oversized
 
 ### 10.5 Icons
 
@@ -315,10 +315,10 @@ Icons should support the interface, not become decoration.
 The preset modal is worth keeping in v1.
 
 Structure:
-- Header
+- header
 - Built-in Presets
 - Custom Presets
-- Footer actions
+- footer actions
 
 Built-in presets for v1 should stay generic and useful:
 - Mobile
@@ -341,15 +341,15 @@ Each preset card should show:
 
 ### 12.1 Auto-Detect Mode
 
-- Shows suggested values
-- Keeps the interface readable
-- Does not hide the structure of the panel
+- shows suggested values
+- keeps the interface readable
+- does not hide the structure of the panel
 
 ### 12.2 Custom Mode
 
-- Enables manual editing of all relevant controls
-- Keeps linked margin logic clear
-- Updates live preview if enabled
+- enables manual editing of all relevant controls
+- keeps linked margin logic clear
+- updates live preview if enabled
 
 ### 12.3 Live Preview
 
