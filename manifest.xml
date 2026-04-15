@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest Version="13.0" ExtensionBundleVersion="1.0.0" ExtensionBundleId="com.formloop.grid-generator" xmlns="http://ns.adobe.com/extension/manifest/1.0">
+    <ExtensionList>
+        <Extension Id="com.formloop.grid-generator.panel" Version="1.0.0" />
+    </ExtensionList>
+    <ExecutionEnvironment>
+        <HostList>
+            <Host Name="ILST" Version="[26.0,99.9]" />
+        </HostList>
+        <LocalizationList>
+            <Localization Locale="en_US" />
+        </LocalizationList>
+        <RequiredRuntimeList>
+            <RequiredRuntime Name="CSXS" Version="13.0" />
+        </RequiredRuntimeList>
+    </ExecutionEnvironment>
+    <DispatchInfoList>
+        <Extension Id="com.formloop.grid-generator.panel">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./index.html</MainPath>
+                    <ScriptPath>./host/host.jsx</ScriptPath>
+                </Resources>
+                <Lifecycle>
+                    <AutoLoad>true</AutoLoad>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Geometry>
+                        <Size>
+                            <Width>340</Width>
+                            <Height>700</Height>
+                        </Size>
+                        <MinSize>
+                            <Width>280</Width>
+                            <Height>400</Height>
+                        </MinSize>
+                    </Geometry>
+                    <Icons>
+                        <Icon Type="Normal">./icons/icon-normal.png</Icon>
+                        <Icon Type="RollOver">./icons/icon-rollover.png</Icon>
+                        <Icon Type="DarkNormal">./icons/icon-dark-normal.png</Icon>
+                        <Icon Type="DarkRollOver">./icons/icon-dark-rollover.png</Icon>
+                    </Icons>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+    </DispatchInfoList>
+</ExtensionManifest>
