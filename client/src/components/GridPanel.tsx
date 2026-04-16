@@ -2,12 +2,19 @@
  * GridPanel - Main plugin panel component
  * 
  * This is the root component for the Formloop Grid & Margin Generator plugin.
- * It manages the overall layout and state of the panel.
+ * It manages the overall layout, state, and CEP communication.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { GridConfig, DEFAULT_GRID_CONFIG, cloneGridConfig } from "@/lib/grid-schema";
-import { initializeCEPBridge, isCEPAvailable } from "@/lib/cep-bridge";
+import { 
+  initializeCEPBridge, 
+  isCEPAvailable,
+  applyGrid,
+  requestAutoDetect,
+  getDocumentInfo,
+  onGridError
+} from "@/lib/cep-bridge";
 import ModeToggle from "./ModeToggle";
 import MarginsSection from "./sections/MarginsSection";
 import ColumnsSection from "./sections/ColumnsSection";
@@ -22,6 +29,10 @@ export default function GridPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cepReady, setCepReady] = useState(false);
+  const [showAutoDetectSuggestion, setShowAutoDetectSuggestion] = useState(false);
+  const [autoDetectSuggestion, setAutoDetectSuggestion] = useState<GridConfig | null>(null);
+  const [documentInfo, setDocumentInfo] = useState<any>(null);
+  const [previewActive, setPreviewActive] = useState(false);
 
   // Initialize CEP bridge on mount
   useEffect(() => {
@@ -30,8 +41,29 @@ export default function GridPanel() {
 
     if (!ready) {
       console.warn("CEP Bridge not available - running in development mode");
+    } else {
+      // Load document info
+      loadDocumentInfo();
+      
+      // Set up error listener
+      const unsubscribe = onGridError((errorMsg) => {
+        setError(errorMsg);
+        setIsLoading(false);
+      });
+
+      return unsubscribe;
     }
   }, []);
+
+  // Load document information
+  const loadDocumentInfo = async () => {
+    try {
+      const info = await getDocumentInfo();
+      setDocumentInfo(info);
+    } catch (err) {
+      console.error("Failed to load document info:", err);
+    }
+  };
 
   // Handle mode change
   const handleModeChange = (mode: "auto" | "custom") => {
@@ -40,7 +72,59 @@ export default function GridPanel() {
       mode,
     }));
     setError(null);
+    setShowAutoDetectSuggestion(false);
+
+    // If switching to auto mode, trigger auto-detect
+    if (mode === "auto") {
+      handleAutoDetect();
+    }
   };
+
+  // Handle auto-detect
+  const handleAutoDetect = useCallback(async () => {
+    if (!cepReady || !documentInfo || documentInfo.artboardCount === 0) {
+      setError("No document or artboards available");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get the active artboard
+      const activeIndex = documentInfo.activeArtboardIndex;
+      if (activeIndex < 0 || activeIndex >= documentInfo.artboards.length) {
+        setError("No active artboard");
+        setIsLoading(false);
+        return;
+      }
+
+      const artboard = documentInfo.artboards[activeIndex];
+      const artboardRect: [number, number, number, number] = [
+        0,
+        artboard.height,
+        artboard.width,
+        0,
+      ];
+
+      // Request auto-detect from ExtendScript
+      const suggestion = await requestAutoDetect(artboardRect);
+
+      if (suggestion && suggestion.success) {
+        setAutoDetectSuggestion(suggestion);
+        setShowAutoDetectSuggestion(true);
+        
+        // Update config with suggestion
+        setConfig(cloneGridConfig(suggestion));
+      } else {
+        setError(suggestion?.message || "Auto-detect failed");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Auto-detect error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [cepReady, documentInfo]);
 
   // Handle scope change
   const handleScopeChange = (scope: "activeArtboard" | "allArtboards") => {
@@ -138,22 +222,31 @@ export default function GridPanel() {
   const handleApplyGrid = async () => {
     setIsLoading(true);
     setError(null);
+    setShowAutoDetectSuggestion(false);
 
     try {
       if (!cepReady) {
         setError("CEP Bridge not available");
+        setIsLoading(false);
         return;
       }
 
-      // TODO: Call CEP bridge to apply grid
-      // const result = await applyGrid(config);
-      // if (!result.success) {
-      //   setError(result.message);
-      // }
-
-      console.log("Apply grid with config:", config);
+      // Call CEP bridge to apply grid
+      const result = await applyGrid(config);
+      
+      if (result.success) {
+        // Success! Show message
+        const message = result.message || "Grid applied successfully";
+        console.log(message);
+        setError(null);
+        
+        // Reload document info
+        await loadDocumentInfo();
+      } else {
+        setError(result.message || "Failed to apply grid");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(err instanceof Error ? err.message : "Unknown error applying grid");
     } finally {
       setIsLoading(false);
     }
@@ -163,6 +256,15 @@ export default function GridPanel() {
   const handleCancel = () => {
     setConfig(cloneGridConfig(DEFAULT_GRID_CONFIG));
     setError(null);
+    setShowAutoDetectSuggestion(false);
+    setPreviewActive(false);
+  };
+
+  // Handle preset load
+  const handlePresetLoad = (preset: any) => {
+    setConfig(cloneGridConfig(preset.config));
+    setError(null);
+    setShowAutoDetectSuggestion(false);
   };
 
   return (
@@ -170,6 +272,11 @@ export default function GridPanel() {
       {/* Header */}
       <div className="grid-panel-header">
         <h1 className="grid-panel-title">Grid Tool</h1>
+        {documentInfo && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {documentInfo.artboardCount} artboard{documentInfo.artboardCount !== 1 ? "s" : ""}
+          </p>
+        )}
       </div>
 
       {/* Content */}
@@ -178,6 +285,18 @@ export default function GridPanel() {
         {error && (
           <div className="mb-4 p-3 rounded-[12px] bg-destructive/10 border border-destructive/20 text-destructive text-sm">
             {error}
+          </div>
+        )}
+
+        {/* Auto-detect suggestion */}
+        {showAutoDetectSuggestion && autoDetectSuggestion && (
+          <div className="mb-4 p-3 rounded-[12px] bg-accent/10 border border-accent/20">
+            <p className="text-xs font-medium text-accent mb-2">
+              Format Class: {(autoDetectSuggestion as any).formatClass}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Suggested grid: {autoDetectSuggestion.columns.count} cols × {autoDetectSuggestion.rows.count} rows
+            </p>
           </div>
         )}
 
@@ -222,7 +341,7 @@ export default function GridPanel() {
         />
 
         {/* Presets Section */}
-        <PresetsSection onPresetLoad={(preset: any) => setConfig(cloneGridConfig(preset.config))} />
+        <PresetsSection onPresetLoad={handlePresetLoad} />
 
         {/* Scope Section */}
         <ScopeSection
