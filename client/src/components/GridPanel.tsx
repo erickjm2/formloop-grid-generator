@@ -5,9 +5,9 @@
  * It manages the overall layout, state, and CEP communication.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { GridConfig, DEFAULT_GRID_CONFIG, cloneGridConfig } from "@/lib/grid-schema";
-import { 
+import {
   initializeCEPBridge, 
   isCEPAvailable,
   applyGrid,
@@ -15,6 +15,7 @@ import {
   getDocumentInfo,
   onGridError
 } from "@/lib/cep-bridge";
+import { saveArtboardConfig, getArtboardConfig } from "@/lib/artboard-memory";
 import ModeToggle from "./ModeToggle";
 import MarginsSection from "./sections/MarginsSection";
 import ColumnsSection from "./sections/ColumnsSection";
@@ -33,6 +34,8 @@ export default function GridPanel() {
   const [autoDetectSuggestion, setAutoDetectSuggestion] = useState<GridConfig | null>(null);
   const [documentInfo, setDocumentInfo] = useState<any>(null);
   const [previewActive, setPreviewActive] = useState(false);
+  const documentNameRef = useRef<string | null>(null);
+  const activeArtboardNameRef = useRef<string | null>(null);
 
   // Initialize CEP bridge on mount
   useEffect(() => {
@@ -60,6 +63,19 @@ export default function GridPanel() {
     try {
       const info = await getDocumentInfo();
       setDocumentInfo(info);
+      documentNameRef.current = info.documentName;
+      
+      // Try to load saved config for active artboard
+      if (info.activeArtboardIndex >= 0 && info.artboards[info.activeArtboardIndex]) {
+        const artboardName = info.artboards[info.activeArtboardIndex].name;
+        activeArtboardNameRef.current = artboardName;
+        
+        const savedConfig = getArtboardConfig(info.documentName, artboardName);
+        if (savedConfig) {
+          setConfig(savedConfig);
+          console.log(`Loaded saved config for artboard: ${artboardName}`);
+        }
+      }
     } catch (err) {
       console.error("Failed to load document info:", err);
     }
@@ -240,6 +256,17 @@ export default function GridPanel() {
         console.log(message);
         setError(null);
         
+        // Save config to artboard memory
+        if (documentNameRef.current && activeArtboardNameRef.current) {
+          saveArtboardConfig(
+            documentNameRef.current,
+            activeArtboardNameRef.current,
+            `${documentNameRef.current}_${activeArtboardNameRef.current}`,
+            config
+          );
+          console.log(`Saved config to artboard memory for: ${activeArtboardNameRef.current}`);
+        }
+        
         // Reload document info
         await loadDocumentInfo();
       } else {
@@ -341,7 +368,7 @@ export default function GridPanel() {
         />
 
         {/* Presets Section */}
-        <PresetsSection onPresetLoad={handlePresetLoad} />
+        <PresetsSection currentConfig={config} onPresetLoad={handlePresetLoad} />
 
         {/* Scope Section */}
         <ScopeSection
