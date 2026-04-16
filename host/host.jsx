@@ -2,12 +2,12 @@
  * Formloop Grid & Margin Generator - ExtendScript Host
  * 
  * This file runs inside Adobe Illustrator and handles:
- * - Grid generation logic
- * - Guide creation and management
- * - Artboard interaction
+ * - Grid generation logic with aspect-ratio-based auto-detect
+ * - Guide creation and management (non-destructive)
+ * - Artboard interaction with error recovery
  * - Communication with the CEP panel
  * 
- * Version: 1.0.0
+ * Version: 2.0.0 (Enhanced with aspect-ratio logic)
  */
 
 // ============================================================================
@@ -25,7 +25,7 @@ csInterface.addEventListener("com.formloop.grid.apply", function(event) {
         var result = applyGrid(config);
         csInterface.evalScript("handleGridApply(" + JSON.stringify(result) + ")");
     } catch (e) {
-        csInterface.evalScript("handleGridError('" + e.message + "')");
+        csInterface.evalScript("handleGridError('" + escapeString(e.message) + "')");
     }
 });
 
@@ -38,7 +38,7 @@ csInterface.addEventListener("com.formloop.grid.preview", function(event) {
         var result = previewGrid(config);
         csInterface.evalScript("handleGridPreview(" + JSON.stringify(result) + ")");
     } catch (e) {
-        csInterface.evalScript("handleGridError('" + e.message + "')");
+        csInterface.evalScript("handleGridError('" + escapeString(e.message) + "')");
     }
 });
 
@@ -51,7 +51,7 @@ csInterface.addEventListener("com.formloop.grid.autodetect", function(event) {
         var config = generateAutoDetectConfig(artboardRect);
         csInterface.evalScript("handleAutoDetect(" + JSON.stringify(config) + ")");
     } catch (e) {
-        csInterface.evalScript("handleGridError('" + e.message + "')");
+        csInterface.evalScript("handleGridError('" + escapeString(e.message) + "')");
     }
 });
 
@@ -70,6 +70,15 @@ function applyGrid(config) {
     }
 
     var doc = app.activeDocument;
+    var startTime = new Date().getTime();
+    var results = {
+        success: true,
+        message: "",
+        artboardsProcessed: 0,
+        artboardsFailed: 0,
+        errors: [],
+        processingTime: 0
+    };
     
     try {
         // Ensure plugin-owned layer exists
@@ -85,21 +94,44 @@ function applyGrid(config) {
             return { success: false, message: "No artboards found" };
         }
         
-        // Generate guides for each artboard
+        // Generate guides for each artboard with error recovery
         for (var i = 0; i < artboards.length; i++) {
-            generateGridForArtboard(doc, artboards[i], config, pluginLayer);
+            try {
+                generateGridForArtboard(doc, artboards[i], config, pluginLayer);
+                results.artboardsProcessed++;
+            } catch (e) {
+                results.artboardsFailed++;
+                results.errors.push({
+                    artboardIndex: i,
+                    artboardName: artboards[i].name || "Untitled",
+                    error: e.message
+                });
+                // Continue processing other artboards
+            }
         }
         
         // Lock the layer
         pluginLayer.locked = true;
         
-        return { 
-            success: true, 
-            message: "Grid applied to " + artboards.length + " artboard(s)",
-            artboardsProcessed: artboards.length
-        };
+        // Calculate processing time
+        results.processingTime = new Date().getTime() - startTime;
+        
+        // Build message
+        if (results.artboardsFailed === 0) {
+            results.message = "Grid applied to " + results.artboardsProcessed + " artboard(s) in " + results.processingTime + "ms";
+        } else {
+            results.message = "Grid applied to " + results.artboardsProcessed + " artboard(s). " + 
+                            results.artboardsFailed + " artboard(s) failed.";
+            results.success = results.artboardsProcessed > 0;
+        }
+        
+        return results;
     } catch (e) {
-        return { success: false, message: e.message };
+        return { 
+            success: false, 
+            message: e.message,
+            processingTime: new Date().getTime() - startTime
+        };
     }
 }
 
@@ -125,12 +157,16 @@ function previewGrid(config) {
         
         // Generate guides for preview
         for (var i = 0; i < artboards.length; i++) {
-            generateGridForArtboard(doc, artboards[i], config, previewLayer);
+            try {
+                generateGridForArtboard(doc, artboards[i], config, previewLayer);
+            } catch (e) {
+                // Continue with other artboards
+            }
         }
         
         return { 
             success: true, 
-            message: "Preview generated",
+            message: "Preview generated for " + artboards.length + " artboard(s)",
             previewLayerId: previewLayer.name
         };
     } catch (e) {
@@ -140,39 +176,40 @@ function previewGrid(config) {
 
 /**
  * Generate auto-detect configuration based on artboard dimensions
+ * Uses aspect-ratio-based format classes instead of web breakpoints
+ * 
  * @param {Array} artboardRect - [left, top, right, bottom]
  * @returns {Object} Auto-detected configuration
  */
 function generateAutoDetectConfig(artboardRect) {
     var width = artboardRect[2] - artboardRect[0];
     var height = artboardRect[1] - artboardRect[3];
+    
+    // Handle invalid dimensions
+    if (width <= 0 || height <= 0) {
+        return getDefaultConfig();
+    }
+    
     var aspectRatio = width / height;
     
-    // Calculate default margins (5% of minimum dimension)
+    // Determine format class based on aspect ratio
+    var formatClass = determineFormatClass(aspectRatio);
+    
+    // Calculate default margins (5% of minimum dimension, rounded to nearest 4px)
     var minDim = Math.min(width, height);
-    var defaultMargin = Math.round(minDim * 0.05);
+    var defaultMargin = Math.round((minDim * 0.05) / 4) * 4;
+    defaultMargin = Math.max(defaultMargin, 8); // Minimum 8px
     
-    // Determine column count based on aspect ratio
-    var columnCount = 12; // Default
-    if (aspectRatio < 0.8) {
-        columnCount = 6; // Portrait
-    } else if (aspectRatio > 1.4) {
-        columnCount = 12; // Landscape
-    } else {
-        columnCount = 8; // Square-ish
-    }
+    // Get grid suggestions for this format class
+    var gridSuggestion = getGridSuggestionForFormat(formatClass, width, height);
     
-    // Determine row count (inverse of column logic)
-    var rowCount = 8;
-    if (aspectRatio < 0.8) {
-        rowCount = 12; // Portrait - more rows
-    } else if (aspectRatio > 1.4) {
-        rowCount = 6; // Landscape - fewer rows
-    }
+    // Suggest baseline from standard values [8, 12, 16, 24]
+    var suggestedBaseline = suggestBaseline(height);
     
     return {
         mode: "auto",
         scope: "activeArtboard",
+        formatClass: formatClass,
         include: {
             margins: true,
             columns: true,
@@ -188,17 +225,165 @@ function generateAutoDetectConfig(artboardRect) {
             unit: "px"
         },
         columns: {
-            count: columnCount,
+            count: gridSuggestion.columns,
+            gutter: gridSuggestion.columnGutter,
+            unit: "px"
+        },
+        rows: {
+            count: gridSuggestion.rows,
+            gutter: gridSuggestion.rowGutter,
+            unit: "px"
+        },
+        baseline: {
+            step: suggestedBaseline,
+            unit: "px"
+        }
+    };
+}
+
+/**
+ * Determine format class based on aspect ratio
+ * @param {Number} aspectRatio - Width / Height
+ * @returns {String} Format class name
+ */
+function determineFormatClass(aspectRatio) {
+    // Ultra-wide (cinema/banner)
+    if (aspectRatio > 2.4) {
+        return "ultraWide";
+    }
+    // Wide (landscape/HD)
+    else if (aspectRatio > 1.5) {
+        return "wide";
+    }
+    // Standard (4:3, 16:10)
+    else if (aspectRatio > 1.2) {
+        return "standard";
+    }
+    // Square-ish (1:1 to 4:3)
+    else if (aspectRatio > 0.75) {
+        return "square";
+    }
+    // Tall (portrait/mobile)
+    else if (aspectRatio > 0.5) {
+        return "tall";
+    }
+    // Ultra-tall (mobile/narrow)
+    else {
+        return "ultraTall";
+    }
+}
+
+/**
+ * Get grid suggestion for a specific format class
+ * @param {String} formatClass - Format class name
+ * @param {Number} width - Artboard width
+ * @param {Number} height - Artboard height
+ * @returns {Object} Grid suggestion with columns, rows, gutters
+ */
+function getGridSuggestionForFormat(formatClass, width, height) {
+    var suggestions = {
+        ultraWide: {
+            columns: 16,
+            columnGutter: 20,
+            rows: 4,
+            rowGutter: 15
+        },
+        wide: {
+            columns: 12,
+            columnGutter: 20,
+            rows: 6,
+            rowGutter: 15
+        },
+        standard: {
+            columns: 10,
+            columnGutter: 16,
+            rows: 8,
+            rowGutter: 12
+        },
+        square: {
+            columns: 8,
+            columnGutter: 16,
+            rows: 8,
+            rowGutter: 12
+        },
+        tall: {
+            columns: 6,
+            columnGutter: 16,
+            rows: 10,
+            rowGutter: 12
+        },
+        ultraTall: {
+            columns: 4,
+            columnGutter: 12,
+            rows: 12,
+            rowGutter: 10
+        }
+    };
+    
+    return suggestions[formatClass] || suggestions.standard;
+}
+
+/**
+ * Suggest baseline grid step from standard values
+ * @param {Number} height - Artboard height
+ * @returns {Number} Suggested baseline step
+ */
+function suggestBaseline(height) {
+    var standardBaselines = [8, 12, 16, 24];
+    
+    // Suggest baseline as ~1/20 of height, snapped to standard value
+    var suggested = Math.round(height / 20);
+    
+    // Find closest standard baseline
+    var closest = standardBaselines[0];
+    var minDiff = Math.abs(suggested - closest);
+    
+    for (var i = 1; i < standardBaselines.length; i++) {
+        var diff = Math.abs(suggested - standardBaselines[i]);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closest = standardBaselines[i];
+        }
+    }
+    
+    return closest;
+}
+
+/**
+ * Get default configuration
+ * @returns {Object} Default grid configuration
+ */
+function getDefaultConfig() {
+    return {
+        mode: "auto",
+        scope: "activeArtboard",
+        formatClass: "standard",
+        include: {
+            margins: true,
+            columns: true,
+            rows: true,
+            baseline: true
+        },
+        margins: {
+            linked: true,
+            top: 20,
+            right: 20,
+            bottom: 20,
+            left: 20,
+            unit: "px"
+        },
+        columns: {
+            count: 12,
             gutter: 20,
             unit: "px"
         },
         rows: {
-            count: rowCount,
+            count: 8,
             gutter: 15,
             unit: "px"
         },
         baseline: {
-            step: 12,
+            step: 16,
             unit: "px"
         }
     };
@@ -251,7 +436,11 @@ function clearPluginGuides(doc, pluginLayer) {
  */
 function getTargetArtboards(doc, scope) {
     if (scope === "activeArtboard") {
-        return [doc.artboards[doc.artboards.getActiveArtboardIndex()]];
+        var activeIndex = doc.artboards.getActiveArtboardIndex();
+        if (activeIndex >= 0 && activeIndex < doc.artboards.length) {
+            return [doc.artboards[activeIndex]];
+        }
+        return [];
     } else {
         // Return all artboards
         var artboards = [];
@@ -281,6 +470,11 @@ function generateGridForArtboard(doc, artboard, config, targetLayer) {
     var bottom = rect[3];
     var width = right - left;
     var height = top - bottom;
+    
+    // Validate artboard dimensions
+    if (width <= 0 || height <= 0) {
+        throw new Error("Invalid artboard dimensions: " + width + "x" + height);
+    }
     
     // Draw margins
     if (config.include.margins) {
@@ -327,6 +521,12 @@ function drawMargins(doc, left, top, right, bottom, marginConfig, targetLayer) {
  */
 function drawColumns(doc, left, top, right, bottom, marginConfig, columnConfig, targetLayer) {
     var contentWidth = (right - left) - marginConfig.left - marginConfig.right;
+    
+    // Validate content width
+    if (contentWidth <= 0) {
+        throw new Error("Content width too small for columns: " + contentWidth);
+    }
+    
     var totalGutter = columnConfig.gutter * (columnConfig.count - 1);
     var totalColumnWidth = contentWidth - totalGutter;
     var colWidth = totalColumnWidth / columnConfig.count;
@@ -355,6 +555,12 @@ function drawColumns(doc, left, top, right, bottom, marginConfig, columnConfig, 
  */
 function drawRows(doc, left, top, right, bottom, marginConfig, rowConfig, targetLayer) {
     var contentHeight = (top - bottom) - marginConfig.top - marginConfig.bottom;
+    
+    // Validate content height
+    if (contentHeight <= 0) {
+        throw new Error("Content height too small for rows: " + contentHeight);
+    }
+    
     var totalGutter = rowConfig.gutter * (rowConfig.count - 1);
     var totalRowHeight = contentHeight - totalGutter;
     var rowHeight = totalRowHeight / rowConfig.count;
@@ -408,6 +614,20 @@ function drawLine(doc, x1, y1, x2, y2, targetLayer) {
 // ============================================================================
 
 /**
+ * Escape string for safe JSON embedding
+ * @param {String} str - String to escape
+ * @returns {String} Escaped string
+ */
+function escapeString(str) {
+    return str
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r")
+        .replace(/\t/g, "\\t");
+}
+
+/**
  * Convert units (basic implementation)
  * @param {Number} value - Value to convert
  * @param {String} fromUnit - Source unit
@@ -449,4 +669,4 @@ function convertUnit(value, fromUnit, toUnit) {
 // ============================================================================
 
 // Log that the host script has loaded
-$.writeln("Formloop Grid Generator host script loaded");
+$.writeln("Formloop Grid Generator host script loaded (v2.0.0)");
